@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FortiGate Policy Generator</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="page-header">
+    <h1>FortiGate Policy Generator</h1>
+    <p class="subtitle">
+      Upload FortiGate traffic logs, filter by IPs and ports, and generate firewall policy scripts.
+    </p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Upload Logs</h2>
+      <form method="post" enctype="multipart/form-data" class="upload-form">
+        <label for="log_files">Select one or more log files</label>
+        <input type="file" id="log_files" name="log_files" multiple required>
+        <button type="submit" class="primary-button">Process Logs</button>
+      </form>
+      {% if file_count %}
+      <p class="meta">Processed {{ file_count }} file{{ '' if file_count == 1 else 's' }}.</p>
+      {% endif %}
+      {% if error %}
+      <p class="alert">{{ error }}</p>
+      {% endif %}
+    </section>
+
+    {% if records_json %}
+    <section class="card filters-card">
+      <h2>Filters</h2>
+      <button id="clear-filters-btn" class="secondary-button" style="margin-bottom: 1rem;">Clear Filters</button>
+      <div class="filters">
+        <div class="filter">
+          <label for="srcip-select">Source IP</label>
+          <select id="srcip-select"></select>
+        </div>
+        <div class="filter">
+          <label for="dstip-select">Destination IP</label>
+          <select id="dstip-select"></select>
+        </div>
+        <div class="filter">
+          <label for="dstport-select">Destination Port</label>
+          <select id="dstport-select"></select>
+        </div>
+        <div class="filter">
+          <label for="srcint-select">Source Interface</label>
+          <select id="srcint-select"></select>
+        </div>
+        <div class="filter">
+          <label for="dstint-select">Destination Interface</label>
+          <select id="dstint-select"></select>
+        </div>
+        <div class="filter">
+          <label for="action-select">Action</label>
+          <select id="action-select"></select>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="card policy-card">
+      <h2>Bulk Export Settings</h2>
+      <p class="meta" style="margin-bottom: 1rem;">Export all filtered records (one policy per record)</p>
+      <div class="policy-settings">
+        <div class="policy-setting">
+          <label for="policy-name-input">Policy Name</label>
+          <input
+            type="text"
+            id="policy-name-input"
+            placeholder="Optional name (defaults to values from the log)"
+          >
+        </div>
+        <div class="policy-setting">
+          <label for="nat-select">NAT</label>
+          <select id="nat-select">
+            <option value="disable">disable</option>
+            <option value="enable">enable</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="card results-card">
+      <div class="results-header">
+        <h2>Results</h2>
+        <div class="results-actions">
+          <span id="record-count">0 records</span>
+          <button id="clear-selection-btn" class="secondary-button">Clear Selection</button>
+          <button id="download-csv-btn" class="secondary-button">Download CSV</button>
+          <button id="download-policy-btn" class="secondary-button">Download Policy Script</button>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 40px;">
+                <input type="checkbox" id="select-all-checkbox" title="Select all">
+              </th>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Source IP</th>
+              <th>Destination IP</th>
+              <th>Destination Port</th>
+              <th>Service</th>
+              <th>Protocol</th>
+              <th>Policy</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="results-body">
+            <tr>
+              <td colspan="10" class="placeholder">No records yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="raw-lines">
+        <label for="raw-lines-output">Filtered Log Lines</label>
+        <textarea id="raw-lines-output" class="raw-textarea" rows="8" readonly placeholder="No records match the selected filters."></textarea>
+      </div>
+    </section>
+
+    <script id="records-data" type="application/json">{{ records_json | safe }}</script>
+    <script id="srcip-data" type="application/json">{{ srcip_options | safe }}</script>
+    <script id="dstip-data" type="application/json">{{ dstip_options | safe }}</script>
+    <script id="dstport-data" type="application/json">{{ dstport_options | safe }}</script>
+    <script id="srcint-data" type="application/json">{{ srcint_options | safe }}</script>
+    <script id="dstint-data" type="application/json">{{ dstint_options | safe }}</script>
+    <script id="action-data" type="application/json">{{ action_options | safe }}</script>
+    <script src="/static/app.js"></script>
+    {% endif %}
+  </main>
+
+  <footer class="page-footer">
+    <p>FortiGate Policy Generator</p>
+  </footer>
+
+  <!-- Side Panel Overlay -->
+  <div id="panel-overlay" class="panel-overlay"></div>
+
+  <!-- Side Panel -->
+  <aside id="selected-policy-panel" class="side-panel">
+    <div class="panel-header">
+      <h2>Create Policy from Selected Records</h2>
+      <button id="close-panel-btn" class="close-panel-btn" aria-label="Close panel">×</button>
+    </div>
+    <div class="panel-content">
+      <div class="selected-info">
+        <span id="selected-count">0 records selected</span>
+      </div>
+      <div class="selected-records-details" id="selected-records-details">
+        <h3>Selected Records</h3>
+        <div id="selected-records-list" class="selected-records-list"></div>
+      </div>
+      <div class="policy-settings">
+        <div class="policy-setting">
+          <label for="selected-policy-name-input">Policy Name *</label>
+          <input
+            type="text"
+            id="selected-policy-name-input"
+            placeholder="Enter policy name"
+            required
+          >
+        </div>
+        <div class="policy-setting">
+          <label for="selected-nat-select">NAT</label>
+          <select id="selected-nat-select">
+            <option value="disable">disable</option>
+            <option value="enable">enable</option>
+          </select>
+        </div>
+      </div>
+      <div class="policy-settings">
+        <div class="policy-setting">
+          <label for="selected-src-type">Source Address</label>
+          <select id="selected-src-type">
+            <option value="all">ALL</option>
+            <option value="selected">From Selected IPs</option>
+            <option value="custom">Custom Subnet</option>
+          </select>
+          <input
+            type="text"
+            id="selected-src-custom"
+            placeholder="e.g., 192.168.1.0/24"
+            class="custom-subnet-input"
+            style="display: none;"
+          >
+        </div>
+        <div class="policy-setting">
+          <label for="selected-dst-type">Destination Address</label>
+          <select id="selected-dst-type">
+            <option value="all">ALL</option>
+            <option value="selected">From Selected IPs</option>
+            <option value="custom">Custom Subnet</option>
+          </select>
+          <input
+            type="text"
+            id="selected-dst-custom"
+            placeholder="e.g., 10.0.0.0/8"
+            class="custom-subnet-input"
+            style="display: none;"
+          >
+        </div>
+      </div>
+      <div class="custom-services-section" id="custom-services-section" style="display: none;">
+        <h3>Custom Services Required</h3>
+        <p class="meta" style="margin-bottom: 1rem; font-size: 0.9rem;">Some ports/services are not in FortiGate defaults. Define custom services:</p>
+        <div id="custom-services-list" class="custom-services-list"></div>
+      </div>
+      <div class="policy-actions">
+        <button id="generate-policy-btn" class="primary-button">Generate Policy Script</button>
+      </div>
+    </div>
+  </aside>
+</body>
+</html>
+
