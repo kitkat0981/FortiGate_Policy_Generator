@@ -465,6 +465,68 @@
     const policyNameOverride = policyNameInput?.value.trim();
     const natOverride = natSelect?.value || "disable";
 
+    // Map ports/protocols to FortiGate 7.4 default service names
+    function mapToFortiGateService(port, protocol, serviceName) {
+      const fortigateServices = [
+        "AFS3", "ALL", "AH", "ALL_ICMP", "ALL_TCP", "ALL_UDP", "AOL", "BGP", "CVSPSERVER", 
+        "DCE-RPC", "DHCP", "DHCP6", "DNS", "ESP", "Exchange Server Email Access", "FINGER", 
+        "FTP", "FTP_GET", "FTP_PUT", "GOPHER", "GRE", "GTP", "H323", "HTTP", "HTTPS", "IKE", 
+        "IMAP", "IMAPS", "INFO_ADDRESS", "INFO_REQUEST", "Internet-Locator-Service", "IRC", 
+        "KERBEROS", "L2TP", "LDAP", "LDAP_UDP", "MGCP", "MMS", "MS-SQL", "MYSQL", "NetMeeting", 
+        "NFS", "NNTP", "NONE", "NTP", "ONC-RPC", "OSPF", "PC-Anywhere", "PING", "POP3", "POP3S", 
+        "PPTP", "QUAKE", "RADIUS", "RADIUS-OLD", "RAUDIO", "RDP", "REXEC", "RIP", "RLOGIN", 
+        "RSH", "RTSP", "SAMBA", "SCCP", "SIP", "SIP-MSNmessenger", "SMB", "SMTP", "SMTPS", 
+        "SNMP", "SOCKS", "SQUID", "SSH", "SYSLOG", "TALK", "TELNET", "TFTP", "TIMESTAMP", 
+        "TRACEROUTE", "UUCP", "VDOLIVE", "VNC", "WAIS", "Web Access", "Windows AD", "WINFRAME", 
+        "WINS", "X-WINDOWS"
+      ];
+      
+      if (serviceName) {
+        const upperService = serviceName.toUpperCase().trim();
+        if (fortigateServices.includes(upperService)) {
+          // Convert PING to ALL_ICMP if protocol is ICMP
+          if (upperService === "PING") {
+            const proto = protocol ? protocol.toLowerCase() : "";
+            if (proto === "icmp" || proto === "1") {
+              return "ALL_ICMP";
+            }
+          }
+          return upperService;
+        }
+      }
+      
+      const portNum = parseInt(port);
+      if (isNaN(portNum)) return null;
+      
+      const proto = protocol ? protocol.toLowerCase() : "tcp";
+      
+      const portServiceMap = {
+        "tcp": {
+          20: "FTP", 21: "FTP", 22: "SSH", 23: "TELNET", 25: "SMTP", 53: "DNS",
+          80: "HTTP", 110: "POP3", 143: "IMAP", 443: "HTTPS", 465: "SMTPS",
+          587: "SMTP", 993: "IMAPS", 995: "POP3S", 1433: "MS-SQL", 3306: "MYSQL",
+          3389: "RDP", 5900: "VNC", 8080: "HTTP"
+        },
+        "udp": {
+          53: "DNS", 67: "DHCP", 68: "DHCP", 69: "TFTP", 123: "NTP", 161: "SNMP",
+          162: "SNMP", 500: "IKE", 1812: "RADIUS", 1813: "RADIUS", 4500: "IKE"
+        },
+        "icmp": {
+          "*": "ALL_ICMP"
+        }
+      };
+      
+      if (portServiceMap[proto] && portServiceMap[proto][portNum]) {
+        return portServiceMap[proto][portNum];
+      }
+      
+      if (proto === "icmp" || proto === "1") {
+        return "ALL_ICMP";
+      }
+      
+      return null;
+    }
+
     const entries = data.map((record) => {
       const name = policyNameOverride || inferredPolicyName(record);
       const srcInterface = record.srcintf || record.srcint || "port1";
@@ -472,6 +534,18 @@
       const srcAddress = record.srcaddr || record.srcip || "all";
       const dstAddress = record.dstaddr || record.dstip || "all";
       const natSetting = natOverride;
+
+      // Map service for this record
+      const port = record.dstport || "";
+      const protocol = record.proto || "";
+      const serviceName = record.service || "";
+      const fortigateService = mapToFortiGateService(port, protocol, serviceName);
+      
+      // Format service value with quotes
+      let serviceValue = '"ALL"';
+      if (fortigateService) {
+        serviceValue = `"${fortigateService}"`;
+      }
 
       return [
         "    edit 0",
@@ -482,7 +556,7 @@
         `        set srcaddr "${srcAddress}"`,
         `        set dstaddr "${dstAddress}"`,
         '        set schedule "always"',
-        '        set service "ALL"',
+        `        set service ${serviceValue}`,
         "        set logtraffic all",
         `        set nat ${natSetting}`,
         "    next",
@@ -622,6 +696,13 @@
         const upperService = serviceName.toUpperCase().trim();
         // Check if service name matches a FortiGate service
         if (fortigateServices.includes(upperService)) {
+          // Convert PING to ALL_ICMP if protocol is ICMP
+          if (upperService === "PING") {
+            const proto = protocol ? protocol.toLowerCase() : "";
+            if (proto === "icmp" || proto === "1") {
+              return "ALL_ICMP";
+            }
+          }
           return upperService;
         }
       }
