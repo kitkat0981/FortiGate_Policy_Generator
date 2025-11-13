@@ -33,8 +33,8 @@ Then browse to <http://127.0.0.1:8000>.
 ## Docker Usage
 
 ```bash
-docker build -t fortigate-policy-generator .
-docker run -d --rm -p 8000:8000 --name fortigate-policy-generator fortigate-policy-generator
+sudo docker build -t fortigate-policy-generator .
+sudo docker run -d --rm -p 8000:8000 --name fortigate-policy-generator fortigate-policy-generator
 ```
 
 Access the application at <http://localhost:8000>. Use `0.0.0.0` instead of `localhost` if the container runs on a remote host.

@@ -246,7 +246,7 @@
               3389: "RDP", 5900: "VNC", 8080: "HTTP"},
       "udp": {53: "DNS", 67: "DHCP", 68: "DHCP", 69: "TFTP", 123: "NTP", 161: "SNMP",
               162: "SNMP", 500: "IKE", 1812: "RADIUS", 1813: "RADIUS", 4500: "IKE"},
-      "icmp": {"*": "PING"}
+      "icmp": {"*": "ALL_ICMP"}
     };
     
     const unmappedServices = new Map();
@@ -272,7 +272,7 @@
           return; // Already mapped
         }
         if (proto === "icmp" || proto === "1") {
-          return; // ICMP maps to PING
+          return; // ICMP maps to ALL_ICMP
         }
       }
       
@@ -646,7 +646,7 @@
           162: "SNMP", 500: "IKE", 1812: "RADIUS", 1813: "RADIUS", 4500: "IKE"
         },
         "icmp": {
-          "*": "PING"
+          "*": "ALL_ICMP"
         }
       };
       
@@ -654,9 +654,9 @@
         return portServiceMap[proto][portNum];
       }
       
-      // For ICMP, return PING
+      // For ICMP, return ALL_ICMP
       if (proto === "icmp" || proto === "1") {
-        return "PING";
+        return "ALL_ICMP";
       }
       
       // If no match, return null (will use ALL as fallback)
@@ -694,12 +694,13 @@
     const customServices = getCustomServiceDefinitions(unmappedServices);
     
     // Determine service value
-    let serviceValue = "ALL";
+    let serviceValue = '"ALL"';
     const allServices = new Set(services);
     customServices.forEach(cs => allServices.add(cs.name));
     
     if (allServices.size > 0) {
-      serviceValue = Array.from(allServices).join(" ");
+      // Format each service with double quotes
+      serviceValue = Array.from(allServices).map(s => `"${s}"`).join(" ");
     }
     
     // Use first record for interface info, or defaults
@@ -730,7 +731,7 @@
       `        set srcaddr "${srcAddress}"`,
       `        set dstaddr "${dstAddress}"`,
       '        set schedule "always"',
-      `        set service "${serviceValue}"`,
+      `        set service ${serviceValue}`,
       "        set logtraffic all",
       `        set nat ${natSetting}`,
       "    next",
